@@ -9,6 +9,8 @@ from contextlib import asynccontextmanager
 from api.routes import satellite, sensors, analytics, admin, export
 from api.routes import health
 from api.routes.enhanced_sensors import router as enhanced_sensors_router
+from api.routes.async_integration import router as async_integration_router
+from api.routes.harmonized_data import router as harmonized_data_router
 from api.database import engine, Base
 from api.auth import get_current_user
 from api.models import User
@@ -51,6 +53,8 @@ app.include_router(enhanced_sensors_router, prefix="/api/sensors", tags=["enhanc
 app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(export.router, prefix="/api/export", tags=["export"])
+app.include_router(async_integration_router, prefix="/api/sensors", tags=["async-integration"])
+app.include_router(harmonized_data_router, prefix="/api/sensors", tags=["harmonized-data"])
 
 @app.get("/")
 async def root():
