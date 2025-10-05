@@ -13,6 +13,7 @@ from api.routes.async_integration import router as async_integration_router
 from api.routes.harmonized_data import router as harmonized_data_router
 from api.routes.calibration import router as calibration_router
 from api.routes.heatmap import router as heatmap_router
+from api.routes.kriging_heatmap import router as kriging_heatmap_router
 from api.database import engine, Base
 from api.auth import get_current_user
 from api.models import User
@@ -62,6 +63,7 @@ app.include_router(async_integration_router, prefix="/api/sensors", tags=["async
 app.include_router(harmonized_data_router, prefix="/api/sensors", tags=["harmonized-data"])
 app.include_router(calibration_router, prefix="/api", tags=["calibration"])
 app.include_router(heatmap_router, prefix="/api", tags=["heatmap"])
+app.include_router(kriging_heatmap_router, prefix="/api", tags=["kriging-heatmap"])
 
 @app.get("/")
 async def root():

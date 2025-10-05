@@ -11,6 +11,8 @@ from ..services.idw_interpolation_service import idw_interpolation_service
 from ..services.vector_tile_service import vector_tile_service
 from ..services.heatmap_cache_service import create_heatmap_cache_service
 from ..services.calibration_engine_service import CalibrationEngineService
+from ..services.kriging_interpolation_service import kriging_interpolation_service
+from ..services.kriging_vector_tile_service import kriging_vector_tile_service
 from ..models.harmonized_models import SensorHarmonized
 
 router = APIRouter()
@@ -117,8 +119,12 @@ async def get_heatmap_grid(
             grid_result = idw_interpolation_service.interpolate_grid(
                 sensor_data, bbox, resolution_m, timestamp
             )
+        elif method == 'kriging':
+            grid_result = await kriging_interpolation_service.interpolate_grid_with_covariates(
+                sensor_data, bbox, resolution_m, timestamp, include_nasa_covariates=True
+            )
         else:
-            raise HTTPException(status_code=501, detail="Kriging interpolation not yet implemented")
+            raise HTTPException(status_code=400, detail=f"Unsupported interpolation method: {method}")
         
         # Calculate processing time
         processing_time_ms = (time.time() - start_time) * 1000
