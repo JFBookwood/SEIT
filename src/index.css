@@ -1,0 +1,114 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Manrope', sans-serif;
+}
+
+/* Fix sensor marker positioning */
+.sensor-marker {
+  cursor: pointer;
+}
+.sensor-marker:hover {
+  z-index: 1000;
+}
+/* /* Clean marker positioning - let maps handle positioning naturally */
+.custom-marker-leaflet {
+  background: transparent;
+  border: none;
+}
+/* Leaflet popup styles */
+.leaflet-popup-content-wrapper {
+  border-radius: 8px;
+}
+
+.leaflet-popup-content {
+  margin: 0;
+}
+
+/* Clean sensor marker styling */
+.custom-sensor-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.sensor-marker {
+  cursor: pointer;
+}
+
+.sensor-marker:hover {
+  z-index: 1000;
+  transform: scale(1.1);
+}
+Mapbox GL styles */
+.mapboxgl-popup-content {
+  padding: 0 !important;
+  border-radius: 8px !important;
+}
+
+.mapboxgl-popup-close-button {
+  color: #6b7280 !important;
+  font-size: 18px !important;
+  padding: 8px !important;
+}
+
+.sensor-popup, .weather-popup {
+  padding: 12px;
+  max-width: 280px;
+}
+
+/* Custom marker animations */
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+.weather-marker {
+  transition: transform 0.2s ease;
+  transform-origin: center center;
+}
+
+.weather-marker:hover {
+  transform: scale(1.2);
+  transform-origin: center center;
+}
+
+/* Dark mode scrollbar */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #374151;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #6b7280;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Light mode scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f3f4f6;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}

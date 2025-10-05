@@ -1,0 +1,5 @@
+{
+  "install": "pnpm install",
+  "dev": "npm run dev",
+  "start": "npm run build && npm run start"
+}

@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  frontend-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      target: builder
+    command: pnpm test
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - CI=true
+
+  backend-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command: pytest tests/ -v --cov=api
+    volumes:
+      - ./backend:/app
+    environment:
+      - DATABASE_URL=sqlite:///./test.db
+      - SECRET_KEY=test-secret-key
+      - ENVIRONMENT=testing
+    depends_on:
+      - test-redis
+      - test-postgres
+
+  test-postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: seit_test
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+    volumes:
+      - test_postgres_data:/var/lib/postgresql/data
+
+  test-redis:
+    image: redis:7-alpine
+    volumes:
+      - test_redis_data:/data
+
+  integration-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command: python -m pytest integration_tests/ -v
+    volumes:
+      - ./backend:/app
+      - ./integration_tests:/app/integration_tests
+    environment:
+      - API_BASE_URL=http://backend-test:8000
+      - FRONTEND_URL=http://frontend-test:3000
+    depends_on:
+      - backend-test
+      - frontend-test
+
+volumes:
+  test_postgres_data:
+  test_redis_data:
+
+networks:
+  default:
+    name: seit_test_network
