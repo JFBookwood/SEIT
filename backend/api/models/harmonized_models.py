@@ -1,6 +1,11 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, JSON, ARRAY, DECIMAL, CheckConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import TIMESTAMPTZ, JSONB
+try:
+    from sqlalchemy.dialects.postgresql import TIMESTAMPTZ, JSONB
+except ImportError:
+    # Fallback for SQLite
+    from sqlalchemy import DateTime as TIMESTAMPTZ, JSON as JSONB
 from ..database import Base
 
 class SensorHarmonized(Base):

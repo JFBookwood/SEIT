@@ -3,6 +3,7 @@ import { Server, Database, Users, Settings, AlertTriangle, CheckCircle, Clock, S
 import StatsCard from '../components/Dashboard/StatsCard';
 import useNotifications from '../hooks/useNotifications';
 import NASATokenManager from '../components/Admin/NASATokenManager';
+import CalibrationPanel from '../components/Admin/CalibrationPanel';
 
 function Admin() {
   const [systemStatus, setSystemStatus] = useState(null);
@@ -171,6 +172,7 @@ function Admin() {
         {[
           { id: 'overview', label: 'System Overview', icon: Server },
           { id: 'nasa', label: 'NASA Integration', icon: Satellite },
+          { id: 'calibration', label: 'Sensor Calibration', icon: Settings },
           { id: 'settings', label: 'Settings', icon: Settings }
         ].map(tab => (
           <button
@@ -231,6 +233,10 @@ function Admin() {
       
       {activeTab === 'nasa' && (
         <NASATokenManager />
+      )}
+      
+      {activeTab === 'calibration' && (
+        <CalibrationPanel />
       )}
       
       {activeTab === 'settings' && (
