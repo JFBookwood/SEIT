@@ -201,7 +201,6 @@ function ControlSidebar({
               }`}
             >
               <Grid3X3 className={`w-5 h-5 ${heatmapEnabled ? 'text-primary-600' : 'text-neutral-500'}`} />
-              <Grid className={`w-5 h-5 ${heatmapEnabled ? 'text-primary-600' : 'text-neutral-500'}`} />
               <div className="flex-1 text-left">
                 <div className={`text-sm font-medium ${heatmapEnabled ? 'text-primary-600' : 'text-neutral-900 dark:text-white'}`}>
                   PM2.5 Heatmap
