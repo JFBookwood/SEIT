@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Activity, MapPin, Zap, AlertTriangle } from 'lucide-react';
 import StatsCard from './StatsCard';
+import CalibrationStatusCard from './CalibrationStatusCard';
 import useNotifications from '../../hooks/useNotifications';
 
 function DashboardOverview({ 
@@ -18,11 +19,13 @@ function DashboardOverview({
     recentReadings: 0,
     dataQuality: 0
   });
+  const [calibrationStatus, setCalibrationStatus] = useState(null);
   
   useEffect(() => {
     if (sensorData.length > 0) {
       calculateStats();
     }
+    fetchCalibrationStatus();
   }, [sensorData, dataStats]);
 
   const calculateStats = () => {
@@ -60,6 +63,26 @@ function DashboardOverview({
       recentReadings: sensorData.length * 24, // Estimate based on hourly readings
       dataQuality: dataQuality
     });
+  };
+  
+  const fetchCalibrationStatus = async () => {
+    try {
+      const response = await fetch('/api/calibration/status');
+      const data = await response.json();
+      setCalibrationStatus(data);
+    } catch (error) {
+      console.error('Failed to fetch calibration status:', error);
+    }
+  };
+  
+  const handleViewCalibrationDetails = () => {
+    // Navigate to admin calibration tab
+    window.location.hash = '#admin';
+    setTimeout(() => {
+      // Trigger tab change if needed
+      const event = new CustomEvent('navigate-to-calibration');
+      window.dispatchEvent(event);
+    }, 100);
   };
   
   if (loading) {
@@ -152,6 +175,14 @@ function DashboardOverview({
           color="green"
           trend={stats.dataQuality > 80 ? "up" : stats.dataQuality > 0 ? "down" : null}
           trendValue={stats.dataQuality > 0 ? `${stats.dataQuality.toFixed(1)}%` : null}
+        />
+      </div>
+      
+      {/* Calibration Status Card */}
+      <div className="mt-6">
+        <CalibrationStatusCard 
+          calibrationData={calibrationStatus}
+          onViewDetails={handleViewCalibrationDetails}
         />
       </div>
       

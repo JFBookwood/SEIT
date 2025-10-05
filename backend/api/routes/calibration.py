@@ -231,3 +231,63 @@ async def get_calibration_status(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving calibration status: {str(e)}")
+
+@router.post("/pipeline/run-daily-calibration")
+async def run_daily_calibration_pipeline(
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db)
+):
+    """Run the daily automated calibration pipeline"""
+    try:
+        if background_tasks:
+            background_tasks.add_task(automated_pipeline.run_daily_calibration_update, db)
+            return {
+                'status': 'started',
+                'message': 'Daily calibration pipeline started in background',
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            }
+        else:
+            result = await automated_pipeline.run_daily_calibration_update(db)
+            return {
+                'status': 'completed',
+                'result': result,
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Daily calibration pipeline failed: {str(e)}")
+
+@router.post("/pipeline/run-qc-validation")
+async def run_qc_validation_pipeline(
+    hours_back: int = 24,
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db)
+):
+    """Run quality control validation pipeline"""
+    try:
+        if background_tasks:
+            background_tasks.add_task(automated_pipeline.run_qc_validation_sweep, db, hours_back)
+            return {
+                'status': 'started',
+                'message': f'QC validation pipeline started for last {hours_back} hours',
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            }
+        else:
+            result = await automated_pipeline.run_qc_validation_sweep(db, hours_back)
+            return {
+                'status': 'completed',
+                'result': result,
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"QC validation pipeline failed: {str(e)}")
+
+@router.get("/pipeline/statistics")
+async def get_pipeline_statistics():
+    """Get automated pipeline statistics"""
+    try:
+        stats = automated_pipeline.get_pipeline_statistics()
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving pipeline statistics: {str(e)}")
