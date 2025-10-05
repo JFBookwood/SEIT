@@ -5,7 +5,7 @@ import {
   RefreshCw, 
   Eye, 
   EyeOff, 
-  Sliders3,
+  Sliders,
   Info
 } from 'lucide-react';
 
@@ -78,7 +78,7 @@ function HeatmapControls({
             className="p-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
             title="Toggle settings"
           >
-            <Sliders3 className="w-4 h-4 text-neutral-600 dark:text-neutral-400" />
+            <Sliders className="w-4 h-4 text-neutral-600 dark:text-neutral-400" />
           </button>
         </div>
       </div>
