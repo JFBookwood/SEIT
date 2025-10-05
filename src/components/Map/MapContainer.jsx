@@ -1,10 +1,21 @@
+import SensorMarkerLayer from './SensorMarkerLayer';
 import React, { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import { LatLngBounds } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import L from 'leaflet';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
+import 'leaflet.markercluster';
+import 'leaflet.markercluster';
 import { Calendar, Play, Pause, SkipForward } from 'lucide-react';
 
+import canvasMarkerService from '../../services/canvasMarkerService';
+import markerClusteringService from '../../services/markerClusteringService';
+// import canvasMarkerService from '../../services/canvasMarkerService';
+// import markerClusteringService from '../../services/markerClusteringService';
 // Fix for default markers
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -13,12 +24,29 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 });
 
-import gibsService from '../../services/gibsService';
 function GIBSTileLayer({ layerId, date, opacity = 0.8 }) {
   const map = useMap();
   
+  // Marker cluster group reference
+  const clusterGroupRef = useRef(null);
+  const [currentZoom, setCurrentZoom] = useState(2);
+  const [mapBounds, setMapBounds] = useState(null);
+  
   useEffect(() => {
     if (!layerId || !date) return;
+    
+    // Initialize clustering for sensor data
+    const clusteringResult = markerClusteringService.initializeClustering(
+      sensorData, 
+      mapBounds,
+      sensorData.length > 100 ? 'dense' : 'default'
+    );
+    
+    // Get clusters and points for current view
+    const { clusters, points } = markerClusteringService.getClustersForBounds(
+      mapBounds || [-180, -90, 180, 90],
+      currentZoom
+    );
     
     // Generate GIBS tile URL
     const gibsUrl = `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/${layerId}/default/${date}/250m/{z}/{y}/{x}.jpg`;
@@ -87,6 +115,172 @@ function TimeSlider({ currentDate, onDateChange, dateRange, isPlaying, onPlayTog
   );
 }
 
+function SensorMarkerLayer({ sensorData, clusterGroup, currentZoom, mapBounds, onMarkerClick }) {
+  const map = useMap();
+  const markersRef = useRef({});
+  const clusterGroupRef = useRef(null); // Ensure clusterGroupRef is defined here
+
+  useEffect(() => {
+    if (!map || !sensorData || sensorData.length === 0) return;
+
+    // Clear existing markers and clusters
+    if (clusterGroupRef.current) {
+      clusterGroupRef.current.clearLayers();
+    } else {
+      // Initialize clusterGroupRef if it's not already initialized
+      clusterGroupRef.current = L.markerClusterGroup({
+        spiderfyOnMaxZoom: false,
+        showCoverageOnHover: false,
+        zoomToBoundsOnClick: true,
+        maxClusterRadius: 80,
+        iconCreateFunction: (cluster) => {
+          const childCount = cluster.getChildCount();
+          const markers = cluster.getAllChildMarkers();
+          
+          const pm25Values = markers.map(m => m.options.sensor?.pm25 || 0);
+          const maxPm25 = Math.max(...pm25Values);
+          const avgPm25 = pm25Values.reduce((a, b) => a + b, 0) / pm25Values.length;
+          
+          const clusterData = {
+            count: childCount,
+            maxPollution: maxPm25,
+            avgPollution: avgPm25,
+            source: 'cluster'
+          };
+          
+          const iconUrl = canvasMarkerService.createCanvasMarker(clusterData, 'clustered');
+          
+          return L.icon({
+            iconUrl,
+            iconSize: [32, 32],
+            iconAnchor: [16, 16],
+            popupAnchor: [0, -16],
+            className: 'cluster-icon'
+          });
+        }
+      });
+      map.addLayer(clusterGroupRef.current);
+    }
+
+    const { clusters, points } = markerClusteringService.getClustersForBounds(
+      mapBounds || [-180, -90, 180, 90],
+      currentZoom
+    );
+
+    // Add cluster markers
+    clusters.forEach(cluster => {
+      const clusterElement = canvasMarkerService.createMapboxElement(
+        {
+          count: cluster.count,
+          maxPollution: cluster.maxPollution,
+          source: 'cluster'
+        },
+        'clustered'
+      );
+      
+      clusterElement.addEventListener('click', () => {
+        const expansionZoom = markerClusteringService.getClusterExpansionZoom(cluster.id);
+        if (expansionZoom) {
+          map.flyTo({
+            center: cluster.coordinates,
+            zoom: expansionZoom
+          });
+        }
+      });
+      
+      const clusterPopup = new L.Popup({
+        offset: 25,
+        closeButton: true
+      }).setHTML(`
+        <div class="cluster-popup">
+          <h3 class="font-semibold text-sm mb-2">${cluster.count} Sensors</h3>
+          <div class="space-y-1 text-xs">
+            <div><strong>Max PM2.5:</strong> ${cluster.maxPollution.toFixed(1)} μg/m³</div>
+            <div><strong>Avg PM2.5:</strong> ${cluster.avgPollution.toFixed(1)} μg/m³</div>
+            <div><strong>Sources:</strong> ${Object.keys(cluster.sourceBreakdown).join(', ')}</div>
+          </div>
+          <div class="text-xs text-neutral-500 mt-2">Click to expand cluster</div>
+        </div>
+      `);
+      
+      const clusterMarker = L.marker(cluster.coordinates, {
+        icon: L.divIcon({
+          className: 'cluster-marker-icon',
+          html: clusterElement.outerHTML,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16]
+        }),
+        sensor: { id: `cluster_${cluster.id}` } // Add a unique identifier
+      })
+        .bindPopup(clusterPopup)
+        .addTo(clusterGroupRef.current);
+      
+      markersRef.current[`cluster_${cluster.id}`] = clusterMarker;
+    });
+    
+    points.forEach(({ sensor, coordinates }) => {
+      const getSeverityLevel = (pm25Value) => {
+        if (pm25Value > 55) return 'critical';
+        if (pm25Value > 35) return 'high';
+        if (pm25Value > 15) return 'moderate';
+        return 'low';
+      };
+
+      const markerElement = canvasMarkerService.createMapboxElement(sensor, 'default');
+      const severity = getSeverityLevel(sensor.pm25);
+      const customIcon = L.divIcon({
+        className: 'custom-sensor-marker',
+        html: `
+          <div style="
+            background-color: ${severity === 'low' ? '#10b981' : severity === 'moderate' ? '#f59e0b' : severity === 'high' ? '#ef4444' : '#dc2626'};
+            border: 2px solid white;
+            border-radius: 50%;
+          "></div>
+        `,
+        iconSize: [20, 20],
+        iconAnchor: [10, 10],
+        popupAnchor: [0, -10]
+      });
+
+      const sensorPopup = new L.Popup({
+        offset: 25,
+        closeButton: false
+      }).setHTML(`
+        <div class="sensor-popup">
+          <h3 class="font-semibold text-sm mb-2">${sensor.name}</h3>
+          <div class="space-y-1 text-xs">
+            <div><strong>PM2.5:</strong> ${sensor.pm25.toFixed(1)} μg/m³</div>
+            <div><strong>Source:</strong> ${sensor.source}</div>
+          </div>
+        </div>
+      `);
+
+      const sensorMarker = L.marker(coordinates, {
+        icon: customIcon,
+        sensor: sensor
+      })
+        .bindPopup(sensorPopup)
+        .addTo(clusterGroupRef.current);
+
+      sensorMarker.on('click', () => {
+        onMarkerClick(sensor);
+      });
+
+      markersRef.current[sensor.id] = sensorMarker;
+    });
+
+    return () => {
+      if (clusterGroupRef.current) {
+        clusterGroupRef.current.clearLayers();
+        map.removeLayer(clusterGroupRef.current);
+      }
+    };
+  }, [map, sensorData, currentZoom, mapBounds, onMarkerClick]);
+
+  return null;
+}
+
+
 function InteractiveMap({ 
   sensorData = [], 
   selectedLayer = null, 
@@ -96,6 +290,10 @@ function InteractiveMap({
   className = ""
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentZoom, setCurrentZoom] = useState(2);
+  const [mapBounds, setMapBounds] = useState(null);
+  const clusterGroupRef = useRef(null);
+  const mapRef = useRef(null);
   const [dateRange] = useState({
     start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days ago
     end: new Date()
@@ -104,7 +302,6 @@ function InteractiveMap({
   // Animation effect
   useEffect(() => {
     if (!isPlaying) return;
-    
     const interval = setInterval(() => {
       const nextDay = new Date(currentDate);
       nextDay.setDate(nextDay.getDate() + 1);
@@ -139,17 +336,6 @@ function InteractiveMap({
           background-color: ${colors[severity]};
           border: 2px solid white;
           border-radius: 50%;
-          width: 20px;
-          height: 20px;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 10px;
-          font-weight: bold;
-          color: white;
-          text-shadow: 0 1px 2px rgba(0,0,0,0.8);
         "></div>
       `,
       iconSize: [20, 20],
@@ -157,27 +343,86 @@ function InteractiveMap({
       popupAnchor: [0, -10]
     });
   };
-  
   const getSeverityLevel = (pm25Value) => {
     if (pm25Value > 55) return 'critical';
     if (pm25Value > 35) return 'high';
     if (pm25Value > 15) return 'moderate';
     return 'low';
   };
-  
+ 
   return (
     <div className={`relative ${className}`}>
       <MapContainer
         center={[20, 0]} // Global center
         zoom={2}
+        ref={mapRef}
         className="w-full h-full rounded-lg"
         zoomControl={true}
         preferCanvas={false}
-        renderer={L.svg()}
+        renderer={L.canvas({
+          padding: 0.5,
+          tolerance: 0
+        })}
         markerZoomAnimation={false}
         fadeAnimation={false}
         zoomAnimation={false}
         trackResize={false}
+        whenCreated={(map) => {
+          mapRef.current = map;
+          
+          // Initialize marker cluster group with custom settings
+          clusterGroupRef.current = L.markerClusterGroup({
+            spiderfyOnMaxZoom: false,
+            showCoverageOnHover: false,
+            zoomToBoundsOnClick: true,
+            maxClusterRadius: 80,
+            iconCreateFunction: (cluster) => {
+              const childCount = cluster.getChildCount();
+              const markers = cluster.getAllChildMarkers();
+              
+              // Calculate cluster statistics
+              const pm25Values = markers.map(m => m.options.sensor?.pm25 || 0);
+              const maxPm25 = Math.max(...pm25Values);
+              const avgPm25 = pm25Values.reduce((a, b) => a + b, 0) / pm25Values.length;
+              
+              // Create cluster data for canvas rendering
+              const clusterData = {
+                count: childCount,
+                maxPollution: maxPm25,
+                avgPollution: avgPm25,
+                source: 'cluster'
+              };
+              
+              // Generate canvas icon
+              const iconUrl = canvasMarkerService.createCanvasMarker(clusterData, 'clustered');
+              
+              return L.icon({
+                iconUrl,
+                iconSize: [32, 32],
+                iconAnchor: [16, 16],
+                popupAnchor: [0, -16],
+                className: 'cluster-icon'
+              });
+            }
+          });
+          
+          map.addLayer(clusterGroupRef.current);
+          
+          // Track zoom and bounds for clustering optimization
+          map.on('zoomend', () => {
+            setCurrentZoom(map.getZoom());
+          });
+          
+          map.on('moveend', () => {
+            const bounds = map.getBounds();
+            setMapBounds([
+              bounds.getWest(),
+              bounds.getSouth(),
+              bounds.getEast(), 
+              bounds.getNorth()
+            ]);
+          });
+        }}
       >
         {/* Base layer */}
         <TileLayer
@@ -195,56 +440,13 @@ function InteractiveMap({
         )}
         
         {/* Sensor markers */}
-        {sensorData.map((sensor, index) => (
-          // Only render markers with valid coordinates
-          sensor.latitude && sensor.longitude && 
-          !isNaN(sensor.latitude) && !isNaN(sensor.longitude) &&
-          sensor.latitude >= -90 && sensor.latitude <= 90 &&
-          sensor.longitude >= -180 && sensor.longitude <= 180 ? (
-          <Marker
-            key={sensor.sensor_id || index}
-            position={[parseFloat(sensor.latitude), parseFloat(sensor.longitude)]}
-            icon={createCustomIcon(
-              sensor.source, 
-              getSeverityLevel(sensor.pm25 || 0)
-            )}
-            riseOnHover={false}
-            riseOffset={0}
-            bubblingMouseEvents={false}
-            interactive={true}
-            eventHandlers={{
-              click: (e) => {
-                e.originalEvent.stopPropagation();
-                e.originalEvent.preventDefault();
-                if (onMarkerClick) {
-                  onMarkerClick(sensor);
-                }
-              }
-            }}
-          >
-            <Popup>
-              <div className="p-2">
-                <h3 className="font-semibold text-sm">
-                  Sensor {sensor.sensor_id}
-                </h3>
-                <div className="mt-2 space-y-1 text-xs">
-                  <div>PM2.5: {sensor.pm25?.toFixed(1) || 'N/A'} μg/m³</div>
-                  <div>PM10: {sensor.pm10?.toFixed(1) || 'N/A'} μg/m³</div>
-                  {sensor.temperature && (
-                    <div>Temp: {sensor.temperature.toFixed(1)}°C</div>
-                  )}
-                  {sensor.humidity && (
-                    <div>Humidity: {sensor.humidity.toFixed(1)}%</div>
-                  )}
-                  <div className="text-neutral-500">
-                    Source: {sensor.source}
-                  </div>
-                </div>
-              </div>
-            </Popup>
-          </Marker>
-          ) : null
-        ))}
+        <SensorMarkerLayer 
+          sensorData={sensorData}
+          clusterGroup={clusterGroupRef.current}
+          currentZoom={currentZoom}
+          mapBounds={mapBounds}
+          onMarkerClick={onMarkerClick}
+        />
       </MapContainer>
       
       {/* Time controls */}

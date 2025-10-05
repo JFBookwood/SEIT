@@ -4,6 +4,7 @@ import logging
 from decimal import Decimal, InvalidOperation
 import json
 
+from .coordinate_validation_service import CoordinateValidationService
 logger = logging.getLogger(__name__)
 
 class DataHarmonizationService:
@@ -59,6 +60,9 @@ class DataHarmonizationService:
             'timestamp_errors': 0,
             'value_range_errors': 0
         }
+        
+        # Initialize coordinate validation service
+        self.coordinate_validator = CoordinateValidationService()
     
     def harmonize_sensor_batch(self, raw_data_list: List[Dict], source: str) -> List[Dict]:
         """Harmonize a batch of sensor records from a specific source"""
@@ -68,10 +72,35 @@ class DataHarmonizationService:
             logger.error(f"Unknown data source: {source}")
             return []
         
+        # Step 1: Pre-validate coordinates for the entire batch
+        coordinate_validation_summary = self.coordinate_validator.batch_validate_coordinates(raw_data_list)
+        logger.info(f"Coordinate validation: {coordinate_validation_summary['valid_sensors']}/{coordinate_validation_summary['total_sensors']} valid")
+        
         mapping = self.FIELD_MAPPINGS[source]
         
         for raw_record in raw_data_list:
             try:
+                # Apply coordinate validation during harmonization
+                lat = self._extract_nested_value(raw_record, mapping.get('lat', 'latitude'))
+                lon = self._extract_nested_value(raw_record, mapping.get('lon', 'longitude'))
+                
+                if lat is not None and lon is not None:
+                    coord_validation = self.coordinate_validator.validate_coordinates(
+                        float(lat), float(lon), raw_record.get('metadata', {})
+                    )
+                    
+                    # Skip sensors with invalid coordinates
+                    if not coord_validation['is_valid']:
+                        logger.debug(f"Skipping sensor with invalid coordinates: {lat}, {lon}")
+                        self.validation_stats['coordinate_errors'] += 1
+                        continue
+                    
+                    # Use normalized coordinates
+                    raw_record = raw_record.copy()
+                    raw_record['latitude'] = coord_validation['normalized_lat']
+                    raw_record['longitude'] = coord_validation['normalized_lon']
+                    raw_record['coordinate_validation'] = coord_validation
+                
                 harmonized = self.harmonize_single_record(raw_record, mapping, source)
                 if harmonized:
                     harmonized_records.append(harmonized)
