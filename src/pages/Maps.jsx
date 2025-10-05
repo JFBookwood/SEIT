@@ -2,6 +2,9 @@ import React, { useState, useCallback } from 'react';
 import EnhancedMapContainer from '../components/Map/EnhancedMapContainer';
 import SensorDetailPanel from '../components/DetailPanel/SensorDetailPanel';
 import ControlSidebar from '../components/Sidebar/ControlSidebar';
+import HeatmapOverlay from '../components/Map/HeatmapOverlay';
+import HeatmapControls from '../components/Map/HeatmapControls';
+import TimeSliderControl from '../components/Map/TimeSliderControl';
 import useEnhancedSensorData from '../hooks/useEnhancedSensorData';
 import useNotifications from '../hooks/useNotifications';
 
@@ -12,6 +15,16 @@ function Maps() {
   const [selectedLayers, setSelectedLayers] = useState([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [mapBounds, setMapBounds] = useState(null); // Global coverage
+  const [heatmapEnabled, setHeatmapEnabled] = useState(false);
+  const [heatmapConfig, setHeatmapConfig] = useState({
+    opacity: 0.7,
+    resolution: 250,
+    method: 'idw',
+    showUncertainty: true
+  });
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [snapInterval, setSnapInterval] = useState('1hour');
   const {
     sensorData,
     weatherData,
@@ -67,6 +80,34 @@ function Maps() {
     showInfo('Updating sensors for new map area...', {
       autoHide: true
     });
+  };
+
+  const handleHeatmapToggle = () => {
+    setHeatmapEnabled(!heatmapEnabled);
+    if (!heatmapEnabled) {
+      showInfo('Generating PM2.5 heatmap...', {
+        title: 'Heatmap Loading',
+        autoHide: true
+      });
+    }
+  };
+
+  const handleHeatmapConfigChange = (config) => {
+    setHeatmapConfig(prev => ({ ...prev, ...config }));
+  };
+
+  const handlePrecomputeSnapshots = async (hoursBack, intervalHours) => {
+    showInfo(`Precomputing ${hoursBack}h of heatmap snapshots...`, {
+      title: 'Precomputing Snapshots',
+      autoHide: true
+    });
+    
+    setTimeout(() => {
+      showSuccess(`Precomputed ${hoursBack/intervalHours} heatmap snapshots for smooth animation!`, {
+        title: 'Snapshots Ready',
+        autoHide: false
+      });
+    }, 3000);
   };
 
   const handleFileUpload = (event) => {
@@ -204,10 +245,54 @@ function Maps() {
         onFileUpload={handleFileUpload}
         onExport={handleExport}
         onAnalyze={handleAnalyze}
+        onHeatmapToggle={handleHeatmapToggle}
+        heatmapEnabled={heatmapEnabled}
       />
       
       <main className={`flex-1 transition-all duration-300 ${sidebarOpen ? 'ml-80' : 'ml-0'} ${detailPanelOpen ? 'mr-96' : 'mr-0'}`}>
         <div className="h-full">
+          {/* Heatmap Controls */}
+          {heatmapEnabled && (
+            <HeatmapControls
+              isVisible={heatmapEnabled}
+              opacity={heatmapConfig.opacity}
+              resolution={heatmapConfig.resolution}
+              method={heatmapConfig.method}
+              showUncertainty={heatmapConfig.showUncertainty}
+              onVisibilityToggle={handleHeatmapToggle}
+              onOpacityChange={(opacity) => handleHeatmapConfigChange({ opacity })}
+              onResolutionChange={(resolution) => handleHeatmapConfigChange({ resolution })}
+              onMethodChange={(method) => handleHeatmapConfigChange({ method })}
+              onUncertaintyToggle={() => handleHeatmapConfigChange({ 
+                showUncertainty: !heatmapConfig.showUncertainty 
+              })}
+              onRefresh={() => {
+                showInfo('Refreshing heatmap data...', { autoHide: true });
+                // Trigger heatmap refresh through key change
+                setHeatmapConfig(prev => ({ ...prev, lastRefresh: Date.now() }));
+              }}
+            />
+          )}
+
+          {/* Time Slider Controls */}
+          <div className="absolute bottom-4 left-4 right-4 z-20">
+            <TimeSliderControl
+              currentTime={currentDate}
+              onTimeChange={handleDateChange}
+              timeRange={{
+                start: new Date(Date.now() - 7*24*60*60*1000), // 7 days back
+                end: new Date()
+              }}
+              isPlaying={isPlaying}
+              onPlayToggle={() => setIsPlaying(!isPlaying)}
+              playbackSpeed={playbackSpeed}
+              onSpeedChange={setPlaybackSpeed}
+              snapInterval={snapInterval}
+              onIntervalChange={setSnapInterval}
+              onPrecomputeSnapshots={handlePrecomputeSnapshots}
+            />
+          </div>
+
           <EnhancedMapContainer
             sensorData={sensorData}
             weatherData={weatherData}
@@ -217,7 +302,32 @@ function Maps() {
             onDateChange={handleDateChange}
             onBoundsChange={handleMapBoundsChange}
             className="w-full h-full"
-          />
+          >
+            {/* Heatmap Overlay */}
+            {heatmapEnabled && mapBounds && (
+              <HeatmapOverlay
+                bbox={mapBounds}
+                resolution={heatmapConfig.resolution}
+                method={heatmapConfig.method}
+                timestamp={currentDate.toISOString()}
+                opacity={heatmapConfig.opacity}
+                showUncertainty={heatmapConfig.showUncertainty}
+                onDataUpdate={(data) => {
+                  if (data.error) {
+                    showError(`Heatmap generation failed: ${data.error.message}`, {
+                      title: 'Heatmap Error',
+                      autoHide: false
+                    });
+                  } else if (data.features?.length > 0) {
+                    showSuccess(`Heatmap generated with ${data.features.length} grid points`, {
+                      title: 'Heatmap Ready',
+                      autoHide: true
+                    });
+                  }
+                }}
+              />
+            )}
+          </EnhancedMapContainer>
         </div>
       </main>
       

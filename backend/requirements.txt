@@ -32,3 +32,5 @@ netcdf4==1.6.4
 h5py==3.9.0
 matplotlib==3.7.2
 seaborn==0.12.2
+mapbox-vector-tile==1.2.1
+scipy==1.11.0

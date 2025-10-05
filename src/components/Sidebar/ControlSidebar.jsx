@@ -11,7 +11,8 @@ import {
   Sliders,
   BookOpen,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Grid3X3
 } from 'lucide-react';
 
 function ControlSidebar({ 
@@ -21,7 +22,9 @@ function ControlSidebar({
   onLayerToggle,
   onFileUpload,
   onExport,
-  onAnalyze
+  onAnalyze,
+  onHeatmapToggle,
+  heatmapEnabled = false
 }) {
   const [activeSection, setActiveSection] = useState('layers');
   const [expandedSections, setExpandedSections] = useState(new Set(['satellite', 'sensors']));
@@ -186,6 +189,31 @@ function ControlSidebar({
               )}
             </div>
             
+        {/* Heatmap Layer Control */}
+        {activeSection === 'layers' && (
+          <div className="mt-4 pt-4 border-t border-neutral-200 dark:border-neutral-700">
+            <button
+              onClick={() => onHeatmapToggle && onHeatmapToggle()}
+              className={`w-full flex items-center space-x-3 p-3 rounded-lg border transition-colors ${
+                heatmapEnabled
+                  ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-200 dark:border-primary-800'
+                  : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-700'
+              }`}
+            >
+              <Grid3X3 className={`w-5 h-5 ${heatmapEnabled ? 'text-primary-600' : 'text-neutral-500'}`} />
+              <div className="flex-1 text-left">
+                <div className={`text-sm font-medium ${heatmapEnabled ? 'text-primary-600' : 'text-neutral-900 dark:text-white'}`}>
+                  PM2.5 Heatmap
+                </div>
+                <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                  IDW interpolation with uncertainty
+                </div>
+              </div>
+              <div className={`w-3 h-3 rounded-full ${heatmapEnabled ? 'bg-primary-600' : 'bg-neutral-300'}`}></div>
+            </button>
+          </div>
+        )}
+        
             {/* Sensor Layers */}
             <div>
               <button
