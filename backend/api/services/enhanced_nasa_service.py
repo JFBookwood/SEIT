@@ -1,3 +1,7 @@
+            
+            # Log API request start
+            start_time = datetime.now()
+            
 import aiohttp
 import asyncio
 from typing import Dict, List, Optional
@@ -6,18 +10,20 @@ import os
 import base64
 import json
 
+from .nasa_auth_service import nasa_auth_service
 class EnhancedNASAService:
     """Enhanced service for NASA Earthdata and GIBS integration"""
     
     def __init__(self):
-        # Your provided JWT token
-        self.jwt_token = "eyJ0eXAiOiJKV1QiLCJvcmlnaW4iOiJFYXJ0aGRhdGEgTG9naW4iLCJzaWciOiJlZGxqd3RwdWJrZXlfb3BzIiwiYWxnIjoiUlMyNTYifQ.eyJ0eXBlIjoiVXNlciIsInVpZCI6Implc3NlX2IiLCJleHAiOjE3NjQ3Njc3MzAsImlhdCI6MTc1OTU4MzczMCwiaXNzIjoiaHR0cHM6Ly91cnMuZWFydGhkYXRhLm5hc2EuZ292IiwiaWRlbnRpdHlfcHJvdmlkZXIiOiJlZGxfb3BzIiwiYWNyIjoiZWRsIiwiYXNzdXJhbmNlX2xldmVsIjozfQ.S6Dr2dUD-VOPn2TzFYOoLb99HfjC7_mjqAyfjyGPt3oYfSiAztBMtgYzIZ8l3nW6_pIs2rQH1sxuvasUfNkEtdMWz6Ny9d1inaMmYJUIwxX0d0ZliIF7kIonbQQx9C9ZYlp5iFm2Dka53fpNnD6i3ymVf51L-9mCH8DZ2QK6wHWs3Upt_bE8v9bzC2weoqSY-YkPd_cq6X37b2wwYi-Ufhvn8Un9nD4OWqw72n-k2KLrTlniEB6IMMakRDumU0MCc9fIepXldoi5Q_9kK0DQhaIVbFofE8E3KvPeC1RaLXucdYL--cQq3dHokcS92wX5Tt957iJilKP329wqcnMm2A"
+        # Use centralized auth service
+        self.auth_service = nasa_auth_service
         
         # API endpoints
         self.gibs_base_url = "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best"
         self.cmr_url = "https://cmr.earthdata.nasa.gov"
         self.harmony_url = "https://harmony.earthdata.nasa.gov"
         
+        if not self.auth_service.is_token_valid():
         # Parse JWT to get user info
         self.user_info = self._parse_jwt_token()
         
@@ -150,6 +156,7 @@ class EnhancedNASAService:
         end_date: str,
         limit: int = 50
     ) -> List[Dict]:
+        if not self.auth_service.is_token_valid():
         """Search for granules using CMR"""
         try:
             headers = {
@@ -165,11 +172,29 @@ class EnhancedNASAService:
                 "bounding_box": f"{west},{south},{east},{north}",
                 "page_size": limit,
                 "format": "json"
-            }
+        # Get authenticated headers
+        try:
+            headers = self.auth_service.get_auth_headers()
+        except ValueError as e:
+            logger.error(f"Failed to get auth headers: {e}")
+            return self._generate_mock_granules(collection_id, bbox, start_date, end_date)
             
             async with aiohttp.ClientSession() as session:
                 url = f"{self.cmr_url}/search/granules.json"
                 async with session.get(url, headers=headers, params=params) as response:
+                # Calculate request duration
+                duration_ms = (datetime.now() - start_time).total_seconds() * 1000
+                response_size = len(await response.read()) if response.content_length else 0
+                
+                # Log API usage
+                self.auth_service.log_api_usage(
+                    'cmr', 
+                    'granules_search', 
+                    response.status, 
+                    response_size, 
+                    duration_ms
+                )
+                
                     if response.status == 200:
                         data = await response.json()
                         granules = []

@@ -14,6 +14,7 @@ from api.routes.harmonized_data import router as harmonized_data_router
 from api.database import engine, Base
 from api.auth import get_current_user
 from api.models import User
+from api.middleware.nasa_security_middleware import NASASecurityMiddleware
 
 load_dotenv()
 
@@ -30,6 +31,8 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Add NASA security middleware
+app.middleware("http")(NASASecurityMiddleware())
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[

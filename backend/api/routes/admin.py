@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from ..database import get_db
 from ..models import SensorData, SatelliteData, AnalysisJob
 from ..auth import get_current_user
+from ..services.nasa_auth_service import nasa_auth_service
 
 router = APIRouter()
 
@@ -67,6 +68,63 @@ async def get_system_status(db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving system status: {str(e)}")
 
+@router.get("/nasa/token-status")
+async def get_nasa_token_status():
+    """Get NASA Earthdata token status and information"""
+    try:
+        token_info = nasa_auth_service.get_token_info()
+        
+        return {
+            "token_status": token_info,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving NASA token status: {str(e)}")
+
+@router.post("/nasa/validate-token")
+async def validate_nasa_token():
+    """Validate NASA Earthdata token against NASA services"""
+    try:
+        validation_result = await nasa_auth_service.validate_token()
+        
+        return validation_result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"NASA token validation failed: {str(e)}")
+
+@router.post("/nasa/test-api-access")
+async def test_nasa_api_access():
+    """Test access to NASA APIs with current token"""
+    try:
+        test_results = await nasa_auth_service.test_api_access()
+        
+        return test_results
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"NASA API access test failed: {str(e)}")
+
+@router.get("/nasa/usage-statistics")
+async def get_nasa_usage_statistics(days_back: int = 7):
+    """Get NASA API usage statistics for monitoring"""
+    try:
+        usage_stats = await nasa_auth_service.get_usage_statistics(days_back)
+        
+        return usage_stats
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving NASA usage statistics: {str(e)}")
+
+@router.post("/nasa/refresh-token")
+async def refresh_nasa_token():
+    """Attempt to refresh NASA token using stored credentials"""
+    try:
+        refresh_result = await nasa_auth_service.refresh_token_if_needed()
+        
+        return refresh_result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"NASA token refresh failed: {str(e)}")
 @router.delete("/cache")
 async def clear_cache():
     """Clear system cache"""
