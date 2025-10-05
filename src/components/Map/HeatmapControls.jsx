@@ -5,7 +5,7 @@ import {
   RefreshCw, 
   Eye, 
   EyeOff, 
-  Sliders,
+  Sliders3,
   Info
 } from 'lucide-react';
 
@@ -15,13 +15,14 @@ function HeatmapControls({
   resolution = 250,
   method = 'idw',
   showUncertainty = true,
+  loading = false,
   onVisibilityToggle,
   onOpacityChange,
   onResolutionChange,
   onMethodChange,
   onUncertaintyToggle,
   onRefresh,
-  metadata = null
+  sensorCount = 0
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -33,12 +34,11 @@ function HeatmapControls({
   ];
 
   const methodOptions = [
-    { value: 'idw', label: 'IDW', description: 'Inverse Distance Weighting' },
-    { value: 'kriging', label: 'Kriging', description: 'Coming soon...', disabled: true }
+    { value: 'idw', label: 'IDW', description: 'Fast & reliable' }
   ];
 
   return (
-    <div className="absolute top-4 right-4 z-30 bg-white dark:bg-neutral-800 rounded-lg shadow-lg border border-neutral-200 dark:border-neutral-700">
+    <div className="absolute top-16 right-4 z-30 bg-white dark:bg-neutral-800 rounded-lg shadow-lg border border-neutral-200 dark:border-neutral-700">
       {/* Header Controls */}
       <div className="flex items-center justify-between p-3 border-b border-neutral-200 dark:border-neutral-700">
         <div className="flex items-center space-x-2">
@@ -46,15 +46,19 @@ function HeatmapControls({
           <span className="text-sm font-medium text-neutral-900 dark:text-white">
             PM2.5 Heatmap
           </span>
+          {loading && (
+            <RefreshCw className="w-3 h-3 text-primary-600 animate-spin" />
+          )}
         </div>
         
         <div className="flex items-center space-x-1">
           <button
             onClick={onRefresh}
             className="p-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
+            disabled={loading}
             title="Refresh heatmap"
           >
-            <RefreshCw className="w-4 h-4 text-neutral-600 dark:text-neutral-400" />
+            <RefreshCw className={`w-4 h-4 text-neutral-600 dark:text-neutral-400 ${loading ? 'animate-spin' : ''}`} />
           </button>
           
           <button
@@ -74,7 +78,7 @@ function HeatmapControls({
             className="p-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
             title="Toggle settings"
           >
-            <Settings className="w-4 h-4 text-neutral-600 dark:text-neutral-400" />
+            <Sliders3 className="w-4 h-4 text-neutral-600 dark:text-neutral-400" />
           </button>
         </div>
       </div>
@@ -94,7 +98,7 @@ function HeatmapControls({
               step="0.1"
               value={opacity}
               onChange={(e) => onOpacityChange(parseFloat(e.target.value))}
-              className="w-full h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer slider"
+              className="w-full h-2 bg-neutral-200 rounded appearance-none cursor-pointer"
             />
           </div>
 
@@ -114,7 +118,7 @@ function HeatmapControls({
                 </option>
               ))}
             </select>
-            <div className="text-xs text-neutral-500 mt-1">
+            <div className="text-xs text-neutral-400 mt-1">
               Current: {resolution}m grid
             </div>
           </div>
@@ -133,11 +137,10 @@ function HeatmapControls({
                     value={option.value}
                     checked={method === option.value}
                     onChange={(e) => onMethodChange(e.target.value)}
-                    disabled={option.disabled}
                     className="w-3 h-3 text-primary-600 border-neutral-300 dark:border-neutral-600 focus:ring-primary-500"
                   />
                   <div className="flex-1">
-                    <div className={`text-xs ${option.disabled ? 'text-neutral-400' : 'text-neutral-900 dark:text-white'}`}>
+                    <div className="text-xs text-neutral-900 dark:text-white">
                       {option.label}
                     </div>
                     <div className="text-xs text-neutral-500">
@@ -168,32 +171,34 @@ function HeatmapControls({
             </button>
           </div>
 
-          {/* Metadata Display */}
-          {metadata && (
+          {/* Status Display */}
+          {sensorCount > 0 && (
             <div className="pt-3 border-t border-neutral-200 dark:border-neutral-700">
               <div className="flex items-center space-x-1 mb-2">
                 <Info className="w-3 h-3 text-neutral-500" />
                 <span className="text-xs font-medium text-neutral-700 dark:text-neutral-300">
-                  Grid Information
+                  Heatmap Info
                 </span>
               </div>
               
               <div className="space-y-1 text-xs text-neutral-600 dark:text-neutral-400">
                 <div className="flex justify-between">
                   <span>Sensors Used:</span>
-                  <span className="font-medium">{metadata.sensors_used || 0}</span>
+                  <span className="font-medium">{sensorCount}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Grid Points:</span>
-                  <span className="font-medium">{metadata.processing_stats?.interpolated_points || 0}</span>
+                  <span>Method:</span>
+                  <span className="font-medium">{method.toUpperCase()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Avg Neighbors:</span>
-                  <span className="font-medium">{metadata.processing_stats?.average_neighbors?.toFixed(1) || 'N/A'}</span>
+                  <span>Resolution:</span>
+                  <span className="font-medium">{resolution}m</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Processing Time:</span>
-                  <span className="font-medium">{metadata.processing_stats?.processing_time_ms?.toFixed(0) || 'N/A'}ms</span>
+                  <span>Status:</span>
+                  <span className={`font-medium ${loading ? 'text-yellow-500' : 'text-green-500'}`}>
+                    {loading ? 'Generating...' : 'Ready'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -201,30 +206,7 @@ function HeatmapControls({
         </div>
       )}
 
-      {/* Loading Indicator */}
-      {loading && (
-        <div className="absolute inset-0 bg-white/80 dark:bg-neutral-800/80 rounded-lg flex items-center justify-center">
-          <div className="flex items-center space-x-2">
-            <RefreshCw className="w-4 h-4 text-primary-600 animate-spin" />
-            <span className="text-xs text-neutral-600 dark:text-neutral-400">
-              Generating heatmap...
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Error Indicator */}
-      {error && (
-        <div className="p-3 bg-environmental-red/10 border-t border-environmental-red/30">
-          <div className="flex items-center space-x-2">
-            <AlertTriangle className="w-4 h-4 text-environmental-red" />
-            <span className="text-xs text-environmental-red font-medium">
-              {error.message}
-            </span>
-          </div>
-        </div>
-      )}
-    </div>
+   </div>
   );
 }
 

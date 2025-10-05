@@ -85,15 +85,34 @@ function Maps() {
   const handleHeatmapToggle = () => {
     setHeatmapEnabled(!heatmapEnabled);
     if (!heatmapEnabled) {
-      showInfo('Generating PM2.5 heatmap...', {
+      showInfo(`Generating PM2.5 heatmap with ${sensorData.length} sensors...`, {
         title: 'Heatmap Loading',
         autoHide: true
       });
     }
   };
 
+  const handleRefreshHeatmap = () => {
+    showInfo('Refreshing heatmap data...', { autoHide: true });
+    // Force refresh by updating config
+    setHeatmapConfig(prev => ({ 
+      ...prev, 
+      lastRefresh: Date.now(),
+      forceRefresh: true 
+    }));
+    
+    // Reset force refresh after a moment
+    setTimeout(() => {
+      setHeatmapConfig(prev => ({ ...prev, forceRefresh: false }));
+    }, 100);
+  };
+
   const handleHeatmapConfigChange = (config) => {
     setHeatmapConfig(prev => ({ ...prev, ...config }));
+    
+    if (config.resolution || config.method) {
+      showInfo('Regenerating heatmap with new settings...', { autoHide: true });
+    }
   };
 
   const handlePrecomputeSnapshots = async (hoursBack, intervalHours) => {
@@ -259,6 +278,8 @@ function Maps() {
               resolution={heatmapConfig.resolution}
               method={heatmapConfig.method}
               showUncertainty={heatmapConfig.showUncertainty}
+              loading={loading}
+              sensorCount={sensorData.length}
               onVisibilityToggle={handleHeatmapToggle}
               onOpacityChange={(opacity) => handleHeatmapConfigChange({ opacity })}
               onResolutionChange={(resolution) => handleHeatmapConfigChange({ resolution })}
@@ -266,11 +287,7 @@ function Maps() {
               onUncertaintyToggle={() => handleHeatmapConfigChange({ 
                 showUncertainty: !heatmapConfig.showUncertainty 
               })}
-              onRefresh={() => {
-                showInfo('Refreshing heatmap data...', { autoHide: true });
-                // Trigger heatmap refresh through key change
-                setHeatmapConfig(prev => ({ ...prev, lastRefresh: Date.now() }));
-              }}
+              onRefresh={handleRefreshHeatmap}
             />
           )}
 
@@ -304,27 +321,15 @@ function Maps() {
             className="w-full h-full"
           >
             {/* Heatmap Overlay */}
-            {heatmapEnabled && mapBounds && (
+            {heatmapEnabled && sensorData.length > 0 && (
               <HeatmapOverlay
-                bbox={mapBounds}
+                sensorData={sensorData}
                 resolution={heatmapConfig.resolution}
                 method={heatmapConfig.method}
-                timestamp={currentDate.toISOString()}
                 opacity={heatmapConfig.opacity}
                 showUncertainty={heatmapConfig.showUncertainty}
-                onDataUpdate={(data) => {
-                  if (data.error) {
-                    showError(`Heatmap generation failed: ${data.error.message}`, {
-                      title: 'Heatmap Error',
-                      autoHide: false
-                    });
-                  } else if (data.features?.length > 0) {
-                    showSuccess(`Heatmap generated with ${data.features.length} grid points`, {
-                      title: 'Heatmap Ready',
-                      autoHide: true
-                    });
-                  }
-                }}
+                isVisible={heatmapEnabled}
+                key={heatmapConfig.lastRefresh} // Force refresh when key changes
               />
             )}
           </EnhancedMapContainer>

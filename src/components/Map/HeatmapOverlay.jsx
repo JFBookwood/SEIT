@@ -1,53 +1,87 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useMap } from 'react-leaflet';
+import { useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import useHeatmapData from '../../hooks/useHeatmapData';
-
+import { generateHeatmapGrid, getColorForValue } from '../../services/heatmapGenerator';
 function HeatmapOverlay({ 
-  bbox = null,
-  resolution = 250,
+   sensorData = [],
+ resolution = 250,
   method = 'idw',
-  timestamp = null,
   opacity = 0.7,
   showUncertainty = true,
-  onDataUpdate = null
+   isVisible = true
 }) {
   const map = useMap();
   const heatmapLayerRef = useRef(null);
   const uncertaintyLayerRef = useRef(null);
-  
-  const {
-    heatmapData,
-    loading,
-    error,
-    metadata,
-    refreshHeatmapData,
-    getColorScale
-  } = useHeatmapData({
-    bbox,
-    resolution,
-    method,
-    timestamp,
-    enableAutoRefresh: false // Manual control for map overlay
-  });
-
-  // Update parent component when data changes
-  useEffect(() => {
-    if (onDataUpdate && heatmapData) {
-      onDataUpdate({
-        features: heatmapData.features || [],
-        metadata: metadata,
-        loading,
-        error
-      });
+   const [currentBounds, setCurrentBounds] = useState(null);
+  const [gridData, setGridData] = useState(null);
+  const [loading, setLoading] = useState(false);
+ 
+   // Track map bounds changes
+  useMapEvents({
+    moveend: () => {
+      const bounds = map.getBounds();
+      setCurrentBounds([
+        bounds.getWest(),
+        bounds.getSouth(),
+        bounds.getEast(),
+        bounds.getNorth()
+      ]);
     }
-  }, [heatmapData, metadata, loading, error, onDataUpdate]);
+  });
+   // Initialize bounds
+ useEffect(() => {
+     if (map && !currentBounds) {
+      const bounds = map.getBounds();
+      setCurrentBounds([
+        bounds.getWest(),
+        bounds.getSouth(),
+        bounds.getEast(),
+        bounds.getNorth()
+      ]);
+   }
+   }, [map, currentBounds]);
+   // Generate heatmap when data or bounds change
+ useEffect(() => {
+     if (!map || !sensorData.length || !currentBounds || !isVisible) {
+      // Clear existing layers
+      if (heatmapLayerRef.current) {
+        map.removeLayer(heatmapLayerRef.current);
+        heatmapLayerRef.current = null;
+      }
+      if (uncertaintyLayerRef.current) {
+        map.removeLayer(uncertaintyLayerRef.current);
+        uncertaintyLayerRef.current = null;
+      }
+      return;
+    }
+     generateHeatmap();
+  }, [map, sensorData, currentBounds, resolution, method, isVisible, opacity, showUncertainty]);
 
-  // Render heatmap layer
-  useEffect(() => {
-    if (!map || !heatmapData?.features) return;
+  const generateHeatmap = async () => {
+    if (loading) return;
+    
+    setLoading(true);
+    try {
+      // Generate interpolation grid
+      const interpolatedGrid = generateHeatmapGrid(sensorData, currentBounds, {
+        resolution,
+        method,
+        searchRadius: 5000 // 5km search radius
+      });
+      
+      setGridData(interpolatedGrid);
+      renderHeatmapLayers(interpolatedGrid);
+      
+    } catch (error) {
+      console.error('Heatmap generation failed:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    // Clear existing layers
+  const renderHeatmapLayers = (interpolatedGrid) => {
+   // Clear existing layers
     if (heatmapLayerRef.current) {
       map.removeLayer(heatmapLayerRef.current);
     }
@@ -55,67 +89,55 @@ function HeatmapOverlay({
       map.removeLayer(uncertaintyLayerRef.current);
     }
 
-    // Create feature group for heatmap
-    const heatmapLayer = L.featureGroup();
+     // Create feature groups
+   const heatmapLayer = L.featureGroup();
     const uncertaintyLayer = L.featureGroup();
 
-    // Process features and create visual elements
-    heatmapData.features.forEach(feature => {
-      const coords = feature.geometry.coordinates;
-      const props = feature.properties;
-      
-      if (!coords || coords.length < 2) return;
-
-      const lat = coords[1];
-      const lon = coords[0];
-      const pm25 = props.c_hat || 0;
-      const uncertainty = props.uncertainty || 0;
-
-      // Create colored circle for PM2.5 value
-      const circle = L.circleMarker([lat, lon], {
-        radius: 8,
-        fillColor: props.color || '#10b981',
-        color: 'white',
+     // Process grid points
+    interpolatedGrid.forEach(gridPoint => {
+      const { lat, lon, value, uncertainty, neighbors } = gridPoint;
+       if (value === null || isNaN(value)) return;
+       // Create heatmap circle
+     const circle = L.circleMarker([lat, lon], {
+         radius: Math.max(4, Math.min(12, resolution / 30)),
+        fillColor: getColorForValue(value),
+       color: 'white',
         weight: 1,
         opacity: 1,
-        fillOpacity: (props.opacity || 1.0) * opacity
-      });
+         fillOpacity: opacity
+     });
 
-      // Add popup with detailed information
-      circle.bindPopup(`
+       // Enhanced popup
+     circle.bindPopup(`
         <div class="heatmap-popup">
-          <h4 class="font-semibold text-sm mb-2">Interpolated PM2.5</h4>
-          <div class="space-y-1 text-xs">
-            <div><strong>Value:</strong> ${pm25.toFixed(1)} μg/m³</div>
-            <div><strong>Uncertainty:</strong> ±${uncertainty.toFixed(1)} μg/m³</div>
-            <div><strong>Neighbors:</strong> ${props.n_eff || 'N/A'} sensors</div>
-            <div><strong>Method:</strong> ${method.toUpperCase()}</div>
+           <h4 class="font-semibold text-sm mb-2">PM2.5 Heatmap</h4>
+         <div class="space-y-1 text-xs">
+             <div><strong>Value:</strong> ${value.toFixed(1)} μg/m³</div>
+           <div><strong>Uncertainty:</strong> ±${uncertainty.toFixed(1)} μg/m³</div>
+             <div><strong>Neighbors:</strong> ${neighbors} sensors</div>
+           <div><strong>Method:</strong> ${method.toUpperCase()}</div>
             <div><strong>Resolution:</strong> ${resolution}m</div>
           </div>
-          ${timestamp ? `<div class="text-xs text-gray-500 mt-2">Time: ${new Date(timestamp).toLocaleString()}</div>` : ''}
         </div>
-      `, {
-        className: 'custom-popup'
-      });
-
+       `);
       heatmapLayer.addLayer(circle);
 
-      // Add uncertainty visualization if enabled
-      if (showUncertainty && uncertainty > 10) {
-        const uncertaintyRadius = Math.min(15, 8 + (uncertainty / 10));
-        
+       // Add uncertainty visualization
+      if (showUncertainty && uncertainty > 8) {
+        const uncertaintyRadius = Math.min(20, 6 + (uncertainty / 8));
+       
         const uncertaintyCircle = L.circleMarker([lat, lon], {
           radius: uncertaintyRadius,
-          fillColor: '#ff6b6b',
-          color: '#ff6b6b',
-          weight: 2,
-          opacity: 0.3,
-          fillOpacity: 0.1,
-          dashArray: '5, 5'
+           fillColor: '#ef4444',
+          color: '#ef4444',
+          weight: 1,
+          opacity: 0.4,
+          fillOpacity: 0.15,
+         dashArray: '5, 5'
         });
 
-        uncertaintyCircle.bindTooltip(`High Uncertainty: ±${uncertainty.toFixed(1)} μg/m³`, {
-          permanent: false,
+         uncertaintyCircle.bindTooltip(`Uncertainty: ±${uncertainty.toFixed(1)} μg/m³`, {
+         permanent: false,
           direction: 'top'
         });
 
@@ -123,35 +145,30 @@ function HeatmapOverlay({
       }
     });
 
-    // Add layers to map
-    heatmapLayer.addTo(map);
-    if (showUncertainty) {
-      uncertaintyLayer.addTo(map);
+     // Add layers
+    if (heatmapLayer.getLayers().length > 0) {
+      heatmapLayer.addTo(map);
+      heatmapLayerRef.current = heatmapLayer;
     }
+    
+   if (showUncertainty) {
+      uncertaintyLayer.addTo(map);
+       uncertaintyLayerRef.current = uncertaintyLayer;
+   }
 
-    // Store references for cleanup
-    heatmapLayerRef.current = heatmapLayer;
-    uncertaintyLayerRef.current = uncertaintyLayer;
-
-    // Cleanup function
+  };
+   // Cleanup on unmount
+  useEffect(() => {
     return () => {
-      if (heatmapLayerRef.current && map.hasLayer(heatmapLayerRef.current)) {
+      if (heatmapLayerRef.current) {
         map.removeLayer(heatmapLayerRef.current);
       }
-      if (uncertaintyLayerRef.current && map.hasLayer(uncertaintyLayerRef.current)) {
+      if (uncertaintyLayerRef.current) {
         map.removeLayer(uncertaintyLayerRef.current);
       }
     };
-  }, [map, heatmapData, opacity, showUncertainty, method, resolution, timestamp]);
-
-  // Trigger refresh when parameters change
-  useEffect(() => {
-    if (bbox) {
-      refreshHeatmapData();
-    }
-  }, [bbox, resolution, method, timestamp, refreshHeatmapData]);
-
-  return null; // This component only manages map layers
+  }, [map]);
+ return null; // This component only manages map layers
 }
 
 export default HeatmapOverlay;
